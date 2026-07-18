@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devsecops-demo-app
+  labels:
+    app: devsecops-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: devsecops-demo
+  template:
+    metadata:
+      labels:
+        app: devsecops-demo
+    spec:
+      containers:
+        - name: devsecops-demo
+          image: YOUR_DOCKERHUB_USERNAME/devsecops-demo:latest
+          ports:
+            - containerPort: 5000
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false

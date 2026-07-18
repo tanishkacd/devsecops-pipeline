@@ -1,0 +1,141 @@
+name: DevSecOps CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/devsecops-demo
+
+jobs:
+
+  # -----------------------------
+  # 1. BUILD STAGE
+  # -----------------------------
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (local, not pushed yet)
+        run: docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
+
+      - name: Save image as tarball for scanning
+        run: docker save ${{ env.IMAGE_NAME }}:${{ github.sha }} -o image.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: image.tar
+
+  # -----------------------------
+  # 2. SECURITY SCAN STAGE (the core of the project)
+  # -----------------------------
+  security_scan:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker image
+        run: docker load -i image.tar
+
+      - name: Run Trivy vulnerability scanner on image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          input: image.tar
+          format: 'table'
+          exit-code: '1'          # fail the pipeline if issues found
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Trivy scan on Kubernetes manifests (misconfig check)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: 'config'
+          scan-ref: 'k8s/'
+          format: 'table'
+          exit-code: '0'          # report only, don't block (change to 1 to enforce)
+          severity: 'CRITICAL,HIGH'
+
+      - name: Generate JSON report (for dashboard/history)
+        if: always()
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          input: image.tar
+          format: 'json'
+          output: 'trivy-report.json'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+
+      - name: Upload scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.json
+
+  # -----------------------------
+  # 3. PUSH STAGE (only runs if scan passed)
+  # -----------------------------
+  push:
+    needs: security_scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+
+  # -----------------------------
+  # 4. DEPLOY STAGE (deploys to your cluster)
+  # -----------------------------
+  deploy:
+    needs: push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # NOTE: For a local Minikube demo, this step usually runs manually
+      # on your machine (`kubectl apply -f k8s/`) since GitHub's runners
+      # can't reach your local cluster. If you deploy to a real cloud
+      # cluster (EKS/GKE/AKS), configure kubeconfig via secrets and
+      # uncomment the steps below.
+
+      # - name: Set up kubectl
+      #   uses: azure/setup-kubectl@v4
+
+      # - name: Configure kubeconfig
+      #   run: echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig.yaml
+
+      # - name: Deploy to Kubernetes
+      #   run: kubectl --kubeconfig=kubeconfig.yaml apply -f k8s/
+
+      - name: Deployment reminder
+        run: echo "Build passed security scan and was pushed. Run 'kubectl apply -f k8s/' locally to deploy to Minikube, or configure cloud deploy above."
