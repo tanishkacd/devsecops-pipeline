@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "timestamp": "2026-07-18T21:14:55Z",
+    "commit": "b047440",
+    "total": 137,
+    "CRITICAL": 3,
+    "HIGH": 19,
+    "MEDIUM": 52,
+    "LOW": 63,
+    "UNKNOWN": 0
+  }
+]
