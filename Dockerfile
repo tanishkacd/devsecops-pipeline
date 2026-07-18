@@ -2,7 +2,7 @@
 FROM python:3.11-slim
 
 # Create a non-root user (good practice, also helps you avoid some Trivy/K8s findings)
-RUN useradd -m appuser
+RUN useradd -m -u 1000 appuser
 
 WORKDIR /app
 
