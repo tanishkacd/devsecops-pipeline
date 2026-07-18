@@ -54,7 +54,7 @@ jobs:
         run: docker load -i image.tar
 
       - name: Run Trivy vulnerability scanner on image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0master
         with:
           input: image.tar
           format: 'table'
