@@ -63,7 +63,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Run Trivy scan on Kubernetes manifests (misconfig check)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'config'
           scan-ref: 'k8s/'
@@ -73,7 +73,7 @@ jobs:
 
       - name: Generate JSON report (for dashboard/history)
         if: always()
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@master
         with:
           input: image.tar
           format: 'json'
