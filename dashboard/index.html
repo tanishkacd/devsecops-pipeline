@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>DevSecOps Vulnerability Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --critical: #f85149;
+    --high: #ff9800;
+    --medium: #ffd60a;
+    --low: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 32px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 4px 0;
+  }
+  p.subtitle {
+    color: var(--muted);
+    margin: 0 0 28px 0;
+    font-size: 14px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .stat-card .label {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .stat-card .value {
+    font-size: 28px;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+  .critical .value { color: var(--critical); }
+  .high .value { color: var(--high); }
+  .medium .value { color: var(--medium); }
+  .low .value { color: var(--low); }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .panel h2 {
+    font-size: 15px;
+    margin: 0 0 16px 0;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .empty-state {
+    color: var(--muted);
+    font-size: 14px;
+    padding: 24px 0;
+    text-align: center;
+  }
+  code {
+    background: #010409;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>🛡️ DevSecOps Vulnerability Dashboard</h1>
+  <p class="subtitle">Trivy scan history for <code>devsecops-demo</code> — tracked automatically on every pipeline run.</p>
+
+  <div class="grid" id="statCards"></div>
+
+  <div class="panel">
+    <h2>Vulnerability Count Over Time</h2>
+    <canvas id="trendChart" height="90"></canvas>
+  </div>
+
+  <div class="panel">
+    <h2>Scan History</h2>
+    <div id="tableWrapper"><div class="empty-state">Loading history...</div></div>
+  </div>
+
+  <script>
+    const SEVERITY_COLORS = {
+      CRITICAL: '#f85149',
+      HIGH: '#ff9800',
+      MEDIUM: '#ffd60a',
+      LOW: '#58a6ff',
+      UNKNOWN: '#8b949e'
+    };
+
+    async function loadHistory() {
+      try {
+        const res = await fetch('../history/scan-history.json');
+        if (!res.ok) throw new Error('Could not load history file');
+        const data = await res.json();
+        render(data);
+      } catch (err) {
+        document.getElementById('tableWrapper').innerHTML =
+          `<div class="empty-state">
+             No scan history found yet, or this page needs to be served over HTTP.<br/>
+             Run <code>python3 -m http.server</code> from the project root and open
+             <code>http://localhost:8000/dashboard/</code> instead of opening the file directly.
+           </div>`;
+        console.error(err);
+      }
+    }
+
+    function render(history) {
+      if (!history || history.length === 0) {
+        document.getElementById('tableWrapper').innerHTML =
+          '<div class="empty-state">No scans recorded yet. Push a commit to trigger the pipeline.</div>';
+        return;
+      }
+
+      const latest = history[history.length - 1];
+
+      // Stat cards
+      const cards = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(sev => `
+        <div class="stat-card ${sev.toLowerCase()}">
+          <div class="label">${sev}</div>
+          <div class="value">${latest[sev] ?? 0}</div>
+        </div>
+      `).join('');
+      document.getElementById('statCards').innerHTML = cards + `
+        <div class="stat-card">
+          <div class="label">Total (latest)</div>
+          <div class="value">${latest.total ?? 0}</div>
+        </div>
+      `;
+
+      // Chart
+      const labels = history.map(h => `${h.commit} (${new Date(h.timestamp).toLocaleDateString()})`);
+      const datasets = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(sev => ({
+        label: sev,
+        data: history.map(h => h[sev] ?? 0),
+        borderColor: SEVERITY_COLORS[sev],
+        backgroundColor: SEVERITY_COLORS[sev] + '33',
+        tension: 0.3,
+        fill: false,
+        pointRadius: 3
+      }));
+
+      new Chart(document.getElementById('trendChart'), {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { labels: { color: '#e6edf3' } }
+          },
+          scales: {
+            x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } },
+            y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' }, beginAtZero: true }
+          }
+        }
+      });
+
+      // Table (most recent first)
+      const rows = [...history].reverse().map(h => `
+        <tr>
+          <td>${new Date(h.timestamp).toLocaleString()}</td>
+          <td><code>${h.commit}</code></td>
+          <td><span class="badge" style="background:${SEVERITY_COLORS.CRITICAL}33;color:${SEVERITY_COLORS.CRITICAL}">${h.CRITICAL ?? 0}</span></td>
+          <td><span class="badge" style="background:${SEVERITY_COLORS.HIGH}33;color:${SEVERITY_COLORS.HIGH}">${h.HIGH ?? 0}</span></td>
+          <td><span class="badge" style="background:${SEVERITY_COLORS.MEDIUM}33;color:${SEVERITY_COLORS.MEDIUM}">${h.MEDIUM ?? 0}</span></td>
+          <td><span class="badge" style="background:${SEVERITY_COLORS.LOW}33;color:${SEVERITY_COLORS.LOW}">${h.LOW ?? 0}</span></td>
+          <td>${h.total ?? 0}</td>
+        </tr>
+      `).join('');
+
+      document.getElementById('tableWrapper').innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>Commit</th><th>Critical</th><th>High</th><th>Medium</th><th>Low</th><th>Total</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    loadHistory();
+  </script>
+</body>
+</html>

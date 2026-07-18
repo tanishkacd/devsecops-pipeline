@@ -5,7 +5,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-
+permissions:
+  contents: write 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/devsecops-demo
 
@@ -79,6 +80,18 @@ jobs:
           format: 'json'
           output: 'trivy-report.json'
           severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+      - name: Record scan history
+        if: always()
+        run: python3 scripts/parse_trivy.py trivy-report.json history/scan-history.json
+
+      - name: Commit updated history
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add history/scan-history.json
+          git diff --staged --quiet || git commit -m "chore: update vulnerability scan history [skip ci]"
+          git push 
 
       - name: Upload scan report
         if: always()
