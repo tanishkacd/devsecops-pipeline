@@ -58,5 +58,15 @@
     "MEDIUM": 61,
     "LOW": 65,
     "UNKNOWN": 0
+  },
+  {
+    "timestamp": "2026-07-20T18:32:56Z",
+    "commit": "0218095",
+    "total": 137,
+    "CRITICAL": 3,
+    "HIGH": 19,
+    "MEDIUM": 52,
+    "LOW": 63,
+    "UNKNOWN": 0
   }
 ]
