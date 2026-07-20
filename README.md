@@ -1,8 +1,5 @@
 # DevSecOps Pipeline: CI/CD with Integrated Container Vulnerability Scanning
 
-A final-year project demonstrating a complete DevSecOps workflow: code push →
-Docker build → automated security scan (Trivy) → gated deployment to
-Kubernetes. Vulnerable images are blocked before they ever reach a cluster.
 
 ## Architecture
 
